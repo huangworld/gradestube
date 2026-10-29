@@ -109,20 +109,30 @@
     if (!alive()) return "Extension reloaded — refresh page";
     const { activeHw, homeworks, settings } = await chrome.storage.local.get(["activeHw", "homeworks", "settings"]);
     const hw = homeworks?.[activeHw];
-    if (!hw) return "No homework set up — open Settings";
-    const model = settings?.provider === "manual" ? "manual" : (settings?.model || "claude-opus-5-5");
-    return `${hw.name}${hw.rubric?.items?.length ? ` · ${hw.rubric.items.length} items` : " · ⚠ no rubric"} · ${model}`;
+    if (!hw) return "No homework yet";
+    const model = settings?.provider === "manual" ? "manual" : (settings?.model || "claude-opus-5-5").replace(/^claude-/, "");
+    return `${hw.name}${hw.rubric?.items?.length ? "" : " · no rubric"} · ${model}`;
   }
+
+  // SF Symbols-style inline icons (content script isn't a module, so a tiny local set)
+  const SF = {
+    sparkles: '<path d="M12 3c.6 4.6 4.4 8.4 9 9-4.6.6-8.4 4.4-9 9-.6-4.6-4.4-8.4-9-9 4.6-.6 8.4-4.4 9-9z"/><path d="M19 2.5c.2 1.6 1.4 2.8 3 3-1.6.2-2.8 1.4-3 3-.2-1.6-1.4-2.8-3-3 1.6-.2 2.8-1.4 3-3z" fill="currentColor" stroke="none"/>',
+    download: '<path d="M12 3v12m-5-5 5 5 5-5"/><path d="M5 15v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"/>',
+    copy: '<rect x="8" y="8" width="13" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/>',
+    menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
+  };
+  const sf = n => `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${SF[n]}</svg>`;
 
   function buildToolbar() {
     const bar = document.createElement("div");
     bar.id = "ytrg-toolbar";
     bar.innerHTML = `
-      <button class="ytrg-primary" data-a="grade">✓ Grade based on rubric</button>
-      <button data-a="download" title="Download transcript (.txt)">⬇</button>
-      <button data-a="copy" title="Copy transcript">⧉</button>
-      <button data-a="settings" title="Homework & rubric settings">⚙</button>
-      <div class="ytrg-label"></div>`;
+      <button class="ytrg-primary" data-a="grade">${sf("sparkles")} Grade</button>
+      <span class="ytrg-label"></span>
+      <span class="ytrg-spacer"></span>
+      <button class="ytrg-icon" data-a="download" title="Download transcript">${sf("download")}</button>
+      <button class="ytrg-icon" data-a="copy" title="Copy transcript">${sf("copy")}</button>
+      <button class="ytrg-icon" data-a="settings" title="Settings">${sf("menu")}</button>`;
     bar.addEventListener("click", e => {
       const a = e.target.closest("button")?.dataset.a;
       if (a) actions[a]();

@@ -29,13 +29,15 @@ After you update the code, click reload on `chrome://extensions`, then refresh a
 
 ### 1. Set up a homework (once per assignment)
 
-Open the extension's **Settings**. Right-click the icon and choose **Options**, or use ⚙ in the side panel.
+Open the side panel (click the extension icon, or **Grade** on any transcript). With no homework yet, the panel shows a **New homework** form right away:
 
-1. Paste an API key for the provider you want to use. Skip this for manual-only grading.
-2. Pick a default model. Star the ones you'll switch between.
-3. Click **+ New homework**, for example "A3 – Video Pitch".
-4. Drop in a `.txt` or `.md` rubric, or paste it, then click **Parse rubric**. See [`examples/sample-rubric.md`](examples/sample-rubric.md).
-5. Check the parsed items table and fix any titles or points. The full rubric text is also sent to the model, so details in it still count.
+1. Type a name, for example "A3 Video Pitch".
+2. Drop in a `.txt` or `.md` rubric, or paste it, then click **Create**. See [`examples/sample-rubric.md`](examples/sample-rubric.md).
+3. Pick **Edit rubric…** from the homework menu at the top to fix titles or points. The full rubric text is also sent to the model, so details in it still count.
+
+The homework menu at the top of the side panel and dashboard switches homeworks and creates new ones. The most recently used homework is selected automatically.
+
+API keys and models live behind **☰** (top right). Paste a key for each provider you want. Skip this for manual-only grading. Star models you'll switch between: they show up in the quick model menu next to **Grade**.
 
 Supported rubric styles:
 
@@ -49,49 +51,50 @@ Supported rubric styles:
 
 1. Open the student's video on YouTube.
 2. Under the description, click **Show transcript**.
-3. In the bar at the top of the transcript panel, click **✓ Grade based on rubric**.
-4. The side panel opens and grades with the selected model. If Chrome blocks the panel from opening, right-click the extension icon and choose **Open side panel**.
+3. In the bar at the top of the transcript panel, click **✦ Grade**.
+4. The side panel opens and grades with the selected model. The model name next to **Grade** switches models. If Chrome blocks the panel from opening, right-click the extension icon and choose **Open side panel**.
 5. Review each item:
    - Click a **timestamp** to play that moment.
    - Click a **quote** to see it in the transcript tab.
-   - Type a new score to override. Use ↺ to go back to the AI score.
-   - Remove weak evidence with ×. Add a TA note.
-6. Set the overall override or comment if needed, then set status to **Reviewed ✓**.
+   - Type a new score to override. It turns purple; ↺ goes back to the AI score.
+   - Remove weak evidence with ×. Add a note.
+6. Override the total next to the big score if needed, add a comment, then set status to **Reviewed**.
 
 Everything autosaves. Reopening the video restores your grades.
 
 ### 3. Grade manually or add evidence
 
-1. Switch the provider to **Manual**, or open the **Transcript** tab at any time.
+1. Pick **Manual** in the model menu next to **Grade**, or open the **Transcript** tab at any time.
 2. Select text in the transcript. A popover lists the rubric items.
 3. Check one or more items and click **Tag**.
-4. Tagged lines get colored markers per item, and the snippet shows up under those items in the **Rubric** tab, marked **TA**.
+4. Tagged lines get colored markers per item, and the snippet shows up under those items in the **Rubric** tab with a person badge.
 
 ### 4. Batch a whole homework
 
-1. Open the **Dashboard** with ▦ in the side panel.
-2. Paste videos, one per line, then click **Add to homework**:
+1. Open the **Dashboard** with the table icon at the bottom of the side panel.
+2. Paste videos, one per line, then click **Add**:
    ```
    Jane Doe, https://youtu.be/abc123
    Team 7, https://www.youtube.com/watch?v=xyz789
    ```
-3. Choose a model and click **Grade ungraded**. Each video opens in a muted tab, its transcript is read, and the tab closes.
-   - Use **Fetch transcripts only** for manual grading.
-   - Use **Re-grade all** to add a run from another model. Your overrides are kept.
-   - Use **Retry failed** for errors.
-   - If tabs fail with "Transcript did not load", tick **foreground tabs**. Chrome can throttle background tabs.
-4. Filter by **Needs review** or **⚠ Unverified quotes**, then open each row with ↗ to check it in the side panel.
+3. Choose a model (button next to **Grade ungraded**) and click **Grade ungraded**. Each video opens in a muted tab, its transcript is read, and the tab closes.
+   - Doc icon: fetch transcripts only, for manual grading.
+   - Refresh icon: re-grade all, adding a run from another model. Your overrides are kept.
+   - Warning icon: retry failed.
+   - If tabs fail with "Transcript did not load", turn on **foreground tabs** in ☰. Chrome can throttle background tabs.
+4. Filter by **Review** or **⚠** (unverified quotes), then hover a row and click ↗ to check it in the side panel.
 
 ### 5. Export
 
-From the dashboard:
+From the dashboard's share menu (top right of the toolbar):
 
-| Button | Gives you |
+| Item | Gives you |
 |---|---|
-| Export CSV | One row per video: student, per-item scores, total, override flags, model, comment |
-| Export report (.md) | Every video's scores, rationales, and quotes with timestamp links |
-| Export JSON | Full raw data, including all model runs |
+| CSV | One row per video: student, per-item scores, total, override flags, model, comment |
+| Report (.md) | Every video's scores, rationales, and quotes with timestamp links |
+| JSON | Full raw data, including all model runs |
 | Transcripts (.zip) | One timestamped `.txt` per video |
+| View all transcripts | All transcripts stacked on the page, tagged lines highlighted |
 
 The side panel can also **Copy report** for one video, which is handy for feedback comments.
 
@@ -121,7 +124,8 @@ content.js/.css    transcript reading, in-page toolbar, seek
 background.js      toolbar copy, opens side panel
 sidepanel.*        per-video grading UI
 dashboard.*        homework table, batch, exports
-options.*          API keys, models, homeworks, rubric upload
-lib/               storage, rubric parser, LLM adapters, grounding, exports
+options.*          full-page settings (same panel as ☰)
+lib/               storage, rubric parser, LLM adapters, grounding, exports,
+                   settings sheet, rubric editor, SF-style SVG icons
 examples/          sample rubric
 ```

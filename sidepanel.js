@@ -1,30 +1,45 @@
 import * as store from "./lib/store.js";
-import { gradeTranscript } from "./lib/llm.js";
+import { gradeTranscript, PROVIDERS } from "./lib/llm.js";
 import { effectiveItems, effectiveOverall, activeRun, round } from "./lib/grade.js";
 import { manualSnippet } from "./lib/grounding.js";
 import { markdownReport, gradesCsv, transcriptText, download, safeName } from "./lib/export.js";
-import { mountPicker } from "./lib/picker.js";
 import { rubricMax } from "./lib/rubric.js";
 import { esc, itemColor, ago, shortModel } from "./lib/ui.js";
+import { icon } from "./lib/icons.js";
+import { makeSheet, mountSettings, mountHwSelect, quickModels } from "./lib/settings.js";
+import { mountRubricEditor } from "./lib/rubricEditor.js";
 
 const $ = s => document.querySelector(s);
 const S = {
   tabId: null, info: null,          // current YouTube tab + {videoId,title,url}
-  hw: null, grade: null,
+  hw: null, grade: null, settings: null,
   view: "rubric", compare: false,
   busy: null, error: null, search: "",
 };
-let picker;
+const sheet = makeSheet(document.body);
+$("#menu").innerHTML = icon("line.3.horizontal");
 
 // ---------------- data ----------------
 async function loadHw() {
-  const all = await store.getHomeworks();
-  const active = await store.getActiveHwId();
-  S.hw = all[active] || null;
-  $("#hw").innerHTML = Object.values(all).length
-    ? Object.values(all).map(h => `<option value="${h.id}" ${h.id === active ? "selected" : ""}>${esc(h.name)}</option>`).join("")
-    : `<option value="">No homework — create one in ⚙</option>`;
+  S.settings = await store.getSettings();
+  S.hw = await store.getActiveHw();
+  await mountHwSelect($("#hw"), {
+    onChange: async () => { await loadHw(); await loadGrade(); render(); },
+    onAction: kind => kind === "new" ? openNewHw() : openEditHw(),
+  });
 }
+function openNewHw() {
+  sheet.open("New homework", el => mountRubricEditor(el, { onDone: () => sheet.close(), onCancel: () => sheet.close() }), { onClose: reload });
+}
+function openEditHw() {
+  if (!S.hw) return openNewHw();
+  sheet.open(S.hw.name, el => mountRubricEditor(el, { hw: S.hw, onDelete: () => sheet.close() }), { onClose: reload });
+}
+function openSettings() {
+  sheet.open("Settings", el => mountSettings(el, { sheet: nested, onChange: reload }), { onClose: reload });
+}
+const nested = makeSheet(document.body); // second layer for hw edit from settings
+async function reload() { await loadHw(); await loadGrade(); render(); }
 
 async function detectTab() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -33,18 +48,11 @@ async function detectTab() {
   S.tabId = tab.id;
   S.info = vid ? { videoId: vid, title: (tab.title || "").replace(/ - YouTube$/, "").replace(/^\(\d+\)\s*/, ""), url: store.videoLink(vid) } : null;
 }
-
-async function loadGrade() {
-  S.grade = S.hw && S.info ? await store.getGrade(S.hw.id, S.info.videoId) : null;
-}
-
-async function save() {
-  await store.saveGrade(S.grade);
-  render();
-}
+async function loadGrade() { S.grade = S.hw && S.info ? await store.getGrade(S.hw.id, S.info.videoId) : null; }
+async function save() { await store.saveGrade(S.grade); render(); }
 
 async function ensureGrade(payload) {
-  if (!S.hw) throw new Error("Create a homework first (⚙ Settings).");
+  if (!S.hw) throw new Error("Create a homework first.");
   let g = await store.getGrade(S.hw.id, payload.videoId);
   if (!g) g = store.newGrade(S.hw.id, payload);
   if (payload.transcript?.length) g.transcript = payload.transcript;
@@ -62,8 +70,7 @@ async function handlePending() {
   S.error = null;
   try {
     await ensureGrade(p);
-    const { provider } = picker.get();
-    if (provider === "manual") { S.view = "transcript"; render(); }
+    if (S.settings.provider === "manual") { S.view = "transcript"; render(); }
     else if (!S.grade.runs.length) await runGrade();
     else render();
   } catch (e) { S.error = e.message; render(); }
@@ -82,20 +89,17 @@ async function loadTranscript() {
 }
 
 async function runGrade() {
-  const { provider, model } = picker.get();
+  const { provider, model } = S.settings;
   if (provider === "manual") { S.view = "transcript"; render(); return; }
   if (!S.grade?.transcript?.length) { await loadTranscript(); if (!S.grade?.transcript?.length) return; }
   S.busy = `Grading with ${shortModel(model)}…`; S.error = null; render();
   try {
-    const settings = await store.getSettings();
-    const run = await gradeTranscript({ provider, model, keys: settings.keys, rubric: S.hw.rubric, transcript: S.grade.transcript, info: S.grade });
+    const run = await gradeTranscript({ provider, model, keys: S.settings.keys, rubric: S.hw.rubric, transcript: S.grade.transcript, info: S.grade });
     const g = await store.getGrade(S.hw.id, S.grade.videoId) || S.grade;
-    g.runs.push(run);
-    g.activeRunId = run.id;
+    g.runs.push(run); g.activeRunId = run.id;
     if (g.status !== "reviewed") g.status = "ai";
     g.error = null;
-    S.grade = g;
-    S.view = "rubric";
+    S.grade = g; S.view = "rubric";
     await store.saveGrade(g);
   } catch (e) { S.error = e.message; }
   S.busy = null; render();
@@ -105,32 +109,46 @@ async function seek(t) {
   const link = store.videoLink(S.grade.videoId, t);
   try {
     const tab = await chrome.tabs.get(S.tabId);
-    if (store.parseVideoId(tab.url || "") === S.grade.videoId) {
-      await chrome.tabs.sendMessage(S.tabId, { action: "seek", t });
-      return;
-    }
+    if (store.parseVideoId(tab.url || "") === S.grade.videoId) { await chrome.tabs.sendMessage(S.tabId, { action: "seek", t }); return; }
   } catch {}
   const tab = await chrome.tabs.create({ url: link });
   S.tabId = tab.id;
 }
 
 // ---------------- render ----------------
+function gradeButton(g) {
+  const manual = S.settings.provider === "manual";
+  const label = manual ? "Tag" : g?.runs.length ? "Re-grade" : "Grade";
+  const dis = !!S.busy || !S.hw?.rubric?.items?.length || !S.info;
+  return `<span class="grade-btn">
+    <button class="primary" data-a="grade" ${dis ? "disabled" : ""}>${icon(manual ? "tag" : "sparkles")} ${label}</button>
+    <button class="model" data-a="model" title="Switch model" ${S.busy ? "disabled" : ""}>${esc(manual ? "Manual" : shortModel(S.settings.model))} ${icon("chevron.down", "xs")}</button></span>`;
+}
+
 function render() {
   const app = $("#app");
-  $("#grade").disabled = !!S.busy || !S.hw?.rubric?.items?.length || !S.info;
-  $("#grade").textContent = picker?.get().provider === "manual" ? "Tag manually" : (S.grade?.runs.length ? "Re-grade" : "Grade");
-
   const msgs = [];
-  if (S.busy) msgs.push(`<div class="card"><span class="spin"></span> ${esc(S.busy)}</div>`);
+  if (S.busy) msgs.push(`<div class="card row nowrap"><span class="spin"></span> ${esc(S.busy)}</div>`);
   if (S.error) msgs.push(`<div class="err">${esc(S.error)}</div>`);
 
-  if (!S.hw) { app.innerHTML = msgs.join("") + `<div class="card">No homework yet. <button class="link" data-a="settings">Create one and upload a rubric</button>.</div>`; return; }
-  if (!S.hw.rubric?.items?.length) { app.innerHTML = msgs.join("") + `<div class="card">“${esc(S.hw.name)}” has no rubric. <button class="link" data-a="settings">Upload one</button>.</div>`; return; }
-  if (!S.info) { app.innerHTML = msgs.join("") + `<div class="card muted">Open a YouTube video. Then open its transcript and click <b>Grade based on rubric</b>.</div>`; return; }
+  if (!S.hw) {
+    app.innerHTML = msgs.join("") + `<div class="setup"><h2>New homework</h2><div id="setup"></div></div>`;
+    mountRubricEditor($("#setup"), { onDone: reload });
+    return;
+  }
+  if (!S.hw.rubric?.items?.length) {
+    app.innerHTML = msgs.join("") + `<div class="setup"><h2>Add a rubric</h2><div id="setup"></div></div>`;
+    mountRubricEditor($("#setup"), { hw: S.hw, onDone: reload, onDelete: reload });
+    return;
+  }
+  if (!S.info) {
+    app.innerHTML = msgs.join("") + `<div class="empty">${icon("play.fill")}<div>Open a YouTube video, show its transcript, then click <b>Grade</b>.</div></div>`;
+    return;
+  }
   if (!S.grade?.transcript?.length) {
-    app.innerHTML = msgs.join("") + `<div class="card"><div class="video"><h2>${esc(S.info.title)}</h2></div>
-      <p class="muted">No transcript saved for this video in “${esc(S.hw.name)}”.</p>
-      <button class="primary" data-a="load" ${S.busy ? "disabled" : ""}>Load transcript from page</button></div>`;
+    app.innerHTML = msgs.join("") + `<div class="video"><h2>${esc(S.info.title)}</h2></div>
+      <div class="empty">${icon("doc.text")}<div>No transcript yet.</div>
+      <button class="primary" data-a="load" ${S.busy ? "disabled" : ""} style="margin-top:10px">${icon("square.and.arrow.down")} Load transcript</button></div>`;
     return;
   }
 
@@ -138,45 +156,43 @@ function render() {
   const eff = effectiveItems(g, items), ov = effectiveOverall(g, items), max = rubricMax(items);
   const run = activeRun(g);
 
-  const head = `<div class="card video">
+  const head = `<div class="video">
     <h2><a href="${esc(g.url)}" target="_blank">${esc(g.title || g.videoId)}</a></h2>
-    <div class="row">
-      <input id="student" class="grow" placeholder="Student / group" value="${esc(g.student)}">
-      <select id="status">
-        ${["pending", "ai", "reviewed", "failed"].map(s => `<option value="${s}" ${g.status === s ? "selected" : ""}>${{ pending: "Pending", ai: "AI graded", reviewed: "Reviewed ✓", failed: "Failed" }[s]}</option>`).join("")}
-      </select>
+    <div class="row nowrap">
+      <input id="student" class="grow" placeholder="Student" value="${esc(g.student)}">
+      <select id="status">${["pending", "ai", "reviewed", "failed"].map(s => `<option value="${s}" ${g.status === s ? "selected" : ""}>${{ pending: "Pending", ai: "AI graded", reviewed: "Reviewed", failed: "Failed" }[s]}</option>`).join("")}</select>
     </div></div>`;
 
-  const runs = g.runs.length ? `<div class="runs"><span class="muted small">Runs:</span>
-    ${g.runs.map(r => `<span class="chip ${r.id === run?.id ? "on" : ""}"><button class="link" data-a="run" data-id="${r.id}" title="${esc(r.provider)} · ${new Date(r.at).toLocaleString()}">${esc(shortModel(r.model))} · ${ago(r.at)}</button><button class="link danger" data-a="delrun" data-id="${r.id}" title="Delete run">×</button></span>`).join("")}
-    ${g.runs.length > 1 ? `<label class="small"><input type="checkbox" id="compare" ${S.compare ? "checked" : ""}> compare</label>` : ""}</div>` : "";
+  const score = `<div class="score-row">
+    <span class="big ${ov.overridden ? "overridden" : ""}" style="${ov.overridden ? "color:var(--override)" : ""}">${ov.graded ? ov.overall : "–"}</span><span class="max">/ ${max}</span>
+    <input type="number" step="0.5" id="overall" class="${ov.overridden ? "overridden" : ""}" value="${ov.overridden ? ov.overall : ""}" placeholder="edit" title="Override total (sum: ${ov.sum}${run ? `, AI: ${ov.aiSum}` : ""})">
+    ${ov.overridden ? `<button class="icon sm" data-a="resetoverall" title="Reset to sum (${ov.sum})">${icon("arrow.counterclockwise")}</button>` : ""}
+    <span class="grow"></span>${gradeButton(g)}</div>`;
 
-  const tabs = `<div class="tabs">
+  const runs = g.runs.length ? `<div class="runs">
+    ${g.runs.map(r => `<span class="chip ${r.id === run?.id ? "on" : ""}" data-a="run" data-id="${r.id}" title="${esc(r.provider)} · ${new Date(r.at).toLocaleString()}">${esc(shortModel(r.model))} · ${ago(r.at)}<button class="icon sm x" data-a="delrun" data-id="${r.id}" title="Delete run" style="color:inherit">${icon("xmark", "xs")}</button></span>`).join("")}
+    ${g.runs.length > 1 ? `<button class="icon sm ${S.compare ? "on" : ""}" data-a="compare" title="Compare runs" style="${S.compare ? "color:var(--accent)" : ""}">${icon("arrow.left.arrow.right")}</button>` : ""}</div>` : "";
+
+  const tabs = `<div class="seg-ctl tabs">
     <button data-a="view" data-v="rubric" class="${S.view === "rubric" ? "on" : ""}">Rubric</button>
-    <button data-a="view" data-v="transcript" class="${S.view === "transcript" ? "on" : ""}">Transcript (${g.transcript.length})</button></div>`;
+    <button data-a="view" data-v="transcript" class="${S.view === "transcript" ? "on" : ""}">Transcript</button></div>`;
 
-  const body = S.view === "rubric" ? renderRubric(g, eff, ov, max, run) : renderTranscript(g, eff);
+  const body = S.view === "rubric" ? renderRubric(g, eff, run) : renderTranscript(g, eff);
 
   const foot = `<footer class="actions">
-    <button data-a="copyreport">Copy report</button>
-    <button data-a="dltranscript">Download transcript</button>
-    <button data-a="csv">Export homework CSV</button></footer>`;
+    <button class="icon" data-a="copyreport" title="Copy report (Markdown)">${icon("doc.on.doc")}</button>
+    <button class="icon" data-a="dltranscript" title="Download transcript">${icon("square.and.arrow.down")}</button>
+    <button class="icon" data-a="csv" title="Export homework CSV">${icon("square.and.arrow.up")}</button>
+    <span class="grow"></span>
+    <button class="icon" data-a="dash" title="Dashboard">${icon("tablecells")}</button></footer>`;
 
   const scroll = app.scrollTop;
-  app.innerHTML = msgs.join("") + head + runs + tabs + body + foot;
+  app.innerHTML = msgs.join("") + head + score + runs + tabs + body + foot;
   app.scrollTop = scroll;
 }
 
-function renderRubric(g, eff, ov, max, run) {
-  const overall = `<div class="card overall">
-    <span class="big">${ov.graded ? ov.overall : "–"}</span><span class="muted">/ ${max}</span>
-    <span class="grow"></span>
-    <label class="small muted">Override <input type="number" step="0.5" id="overall" class="${ov.overridden ? "overridden" : ""}" value="${ov.overridden ? ov.overall : ""}" placeholder="${ov.sum}"></label>
-    ${ov.overridden ? `<button class="icon" data-a="resetoverall" title="Reset to sum (${ov.sum})">↺</button>` : ""}
-    <div class="small muted" style="flex-basis:100%">Sum of items: ${ov.sum}${run ? ` · AI total: ${ov.aiSum}` : ""}</div>
-    <textarea id="comment" rows="2" placeholder="${esc(run?.comment || "Overall comment")}">${esc(g.comment)}</textarea>
-  </div>`;
-
+function renderRubric(g, eff, run) {
+  const comment = `<textarea class="comment" id="comment" rows="1" placeholder="${esc(run?.comment || "Comment")}">${esc(g.comment)}</textarea>`;
   const cards = eff.map((e, i) => {
     const it = e.item;
     let cmp = "";
@@ -185,31 +201,30 @@ function renderRubric(g, eff, ov, max, run) {
       const vals = scores.map(x => x.s).filter(v => v != null);
       const spread = vals.length ? Math.max(...vals) - Math.min(...vals) : 0;
       const dis = spread >= Math.max(1, 0.2 * (it.maxPoints || 0));
-      cmp = `<div class="cmp">${scores.map(x => `<span class="chip ${dis ? "disagree" : ""}" title="${esc(x.r.items.find(y => y.id === it.id)?.rationale || "")}">${esc(shortModel(x.r.model))}: ${x.s ?? "–"}</span>`).join("")}${dis ? `<span class="badge warn">disagree</span>` : ""}</div>`;
+      cmp = `<div class="cmp">${scores.map(x => `<span class="chip ${dis ? "disagree" : ""}" title="${esc(x.r.items.find(y => y.id === it.id)?.rationale || "")}">${esc(shortModel(x.r.model))} ${x.s ?? "–"}</span>`).join("")}</div>`;
     }
     const snips = e.snippets.map(s => `<div class="snip ${s.source}">
-        <button class="link ts" data-a="seek" data-t="${s.t}" title="Play from here (⌘/Ctrl-click: new tab)">${esc(s.ts)}</button>
+        <button class="link ts" data-a="seek" data-t="${s.t}" title="Play from here (⌘-click: new tab)">${esc(s.ts)}</button>
         <span class="q" data-a="goto" data-seg="${s.segStart}" title="Show in transcript">“${esc(s.quote)}”</span>
-        ${s.verified ? (s.fuzzy ? `<span class="badge" title="Close but not exact match">≈</span>` : "") : `<span class="badge warn" title="Quote not found in transcript">⚠ unverified</span>`}
-        ${s.source === "manual" ? `<span class="badge">TA</span>` : ""}
-        <button class="x" data-a="delsnip" data-item="${it.id}" data-id="${s.id}" title="Remove">×</button></div>`).join("");
+        ${s.verified ? (s.fuzzy ? `<span class="badge" title="Close but not exact match">≈</span>` : "") : `<span class="badge warn" title="Quote not found in transcript">${icon("exclamationmark.triangle", "xs")}</span>`}
+        ${s.source === "manual" ? `<span class="badge" title="Tagged by you">${icon("person", "xs")}</span>` : ""}
+        <button class="icon sm x" data-a="delsnip" data-item="${it.id}" data-id="${s.id}" title="Remove">${icon("xmark", "xs")}</button></div>`).join("");
     return `<div class="card item" style="--c:${itemColor(i)}">
       <div class="item-head">
         <div class="title">${esc(it.title)}${it.description ? `<div class="desc">${esc(it.description)}</div>` : ""}</div>
         <div class="score-box">
-          <input type="number" step="0.5" min="0" ${it.maxPoints != null ? `max="${it.maxPoints}"` : ""} data-score="${it.id}" class="${e.overridden ? "overridden" : ""}" value="${e.score ?? ""}" placeholder="–">
-          <span class="muted">/ ${it.maxPoints ?? "?"}</span>
-          ${e.overridden ? `<button class="icon" data-a="resetitem" data-id="${it.id}" title="Reset to AI score (${e.aiScore ?? "–"})">↺</button>` : ""}
+          <input type="number" step="0.5" min="0" ${it.maxPoints != null ? `max="${it.maxPoints}"` : ""} data-score="${it.id}" class="${e.overridden ? "overridden" : ""}" value="${e.score ?? ""}" placeholder="–" title="${e.overridden ? `AI: ${e.aiScore ?? "–"}` : "Score"}">
+          <span class="max">/${it.maxPoints ?? "?"}</span>
+          ${e.overridden ? `<button class="icon sm" data-a="resetitem" data-id="${it.id}" title="Reset to AI score (${e.aiScore ?? "–"})">${icon("arrow.counterclockwise")}</button>` : ""}
         </div>
       </div>
-      ${e.overridden && e.aiScore != null ? `<div class="small muted">AI: ${e.aiScore}</div>` : ""}
       ${cmp}
       ${e.rationale ? `<div class="rationale">${esc(e.rationale)}</div>` : ""}
-      <div class="snips">${snips || `<span class="muted small">No evidence yet. Select text in the Transcript tab to tag.</span>`}</div>
-      <textarea class="note" data-note="${it.id}" rows="1" placeholder="TA note">${esc(e.note)}</textarea>
+      <div class="snips">${snips || `<span class="muted small">No evidence</span>`}</div>
+      <textarea class="note" data-note="${it.id}" rows="1" placeholder="Note">${esc(e.note)}</textarea>
     </div>`;
   }).join("");
-  return overall + cards;
+  return comment + cards;
 }
 
 function renderTranscript(g, eff) {
@@ -218,20 +233,40 @@ function renderTranscript(g, eff) {
     for (let k = s.segStart; k <= s.segEnd && k < segItems.length; k++) if (!segItems[k].includes(i)) segItems[k].push(i);
   }));
   const q = S.search.trim().toLowerCase();
-  const legend = `<div class="legend">${eff.map((e, i) => `<span style="--c:${itemColor(i)}">${esc(e.item.title)} (${e.snippets.length})</span>`).join("")}</div>`;
+  const legend = `<div class="legend">${eff.map((e, i) => `<span style="--c:${itemColor(i)}">${esc(e.item.title)} ${e.snippets.length}</span>`).join("")}</div>`;
   const rows = g.transcript.map((s, i) => {
     if (q && !s.text.toLowerCase().includes(q)) return "";
     const tags = segItems[i];
-    return `<div class="seg ${tags.length ? "tagged" : ""}" data-i="${i}" style="${tags.length ? `--c:${itemColor(tags[0])}` : ""}"
-      title="${tags.map(k => esc(eff[k].item.title)).join(", ")}">
+    return `<div class="seg ${tags.length ? "tagged" : ""}" data-i="${i}" style="${tags.length ? `--c:${itemColor(tags[0])}` : ""}" title="${tags.map(k => esc(eff[k].item.title)).join(", ")}">
       <button class="link ts" data-a="seek" data-t="${s.t}">${esc(s.ts)}</button>
       <span class="txt">${esc(s.text)}</span>
       <span class="dots">${tags.map(k => `<span class="dot" style="--c:${itemColor(k)}"></span>`).join("")}</span></div>`;
   }).join("");
-  return `<div class="row"><input id="search" class="grow" placeholder="Search transcript" value="${esc(S.search)}"></div>
-    <div class="small muted">Select text (across lines is fine), then tag it to one or more rubric items.</div>
+  return `<div class="search">${icon("magnifyingglass")}<input id="search" placeholder="Search · select text to tag it" value="${esc(S.search)}"></div>
     ${legend}<div id="segs">${rows}</div>`;
 }
+
+// ---------------- model popover ----------------
+function showModelMenu(anchor) {
+  const pop = $("#popover"), s = S.settings;
+  const cur = `${s.provider}:${s.model}`;
+  const opts = quickModels(s);
+  pop.innerHTML = `${opts.map(f => `<button class="mi ${f === cur ? "on" : ""}" data-m="${esc(f)}">${icon(f === cur ? "checkmark" : "circle", "xs")} ${esc(shortModel(f.split(":").slice(1).join(":")))}<span class="muted small" style="margin-left:auto">${esc(PROVIDERS[f.split(":")[0]]?.label || "")}</span></button>`).join("")}
+    ${opts.length ? "<hr>" : ""}
+    <button class="mi ${s.provider === "manual" ? "on" : ""}" data-m="manual:">${icon(s.provider === "manual" ? "checkmark" : "tag", "xs")} Manual</button>
+    <hr><button class="mi" data-more>${icon("gearshape", "xs")} More models…</button>`;
+  pop.hidden = false;
+  const r = anchor.getBoundingClientRect();
+  pop.style.top = Math.min(r.bottom + 4, innerHeight - pop.offsetHeight - 8) + "px";
+  pop.style.left = Math.max(8, Math.min(r.right - pop.offsetWidth, innerWidth - pop.offsetWidth - 8)) + "px";
+  pop.querySelectorAll("[data-m]").forEach(b => b.onclick = async () => {
+    const [p, ...m] = b.dataset.m.split(":");
+    S.settings = await store.saveSettings({ provider: p, model: m.join(":") || s.model });
+    pop.hidden = true; render();
+  });
+  pop.querySelector("[data-more]").onclick = () => { pop.hidden = true; openSettings(); };
+}
+document.addEventListener("mousedown", e => { if (!e.target.closest?.("#popover, [data-a=model]")) $("#popover").hidden = true; });
 
 // ---------------- events ----------------
 document.addEventListener("click", async e => {
@@ -239,11 +274,14 @@ document.addEventListener("click", async e => {
   if (!el) return;
   const a = el.dataset.a, g = S.grade;
   switch (a) {
-    case "settings": chrome.runtime.openOptionsPage(); break;
+    case "grade": await runGrade(); break;
+    case "model": showModelMenu(el); break;
     case "load": await loadTranscript(); break;
     case "view": S.view = el.dataset.v; render(); break;
+    case "compare": S.compare = !S.compare; render(); break;
     case "run": g.activeRunId = el.dataset.id; await save(); break;
     case "delrun":
+      e.stopPropagation();
       if (!confirm("Delete this AI run?")) return;
       g.runs = g.runs.filter(r => r.id !== el.dataset.id);
       if (g.activeRunId === el.dataset.id) g.activeRunId = g.runs.at(-1)?.id || null;
@@ -269,21 +307,18 @@ document.addEventListener("click", async e => {
     }
     case "resetitem": delete g.overrides[el.dataset.id]; await save(); break;
     case "resetoverall": g.overallOverride = null; await save(); break;
-    case "copyreport":
-      await navigator.clipboard.writeText(markdownReport(g, S.hw));
-      flash(el, "Copied ✓"); break;
+    case "copyreport": await navigator.clipboard.writeText(markdownReport(g, S.hw)); flash(el); break;
     case "dltranscript": download(`${safeName(g.student || g.title)}.txt`, transcriptText(g)); break;
     case "csv": download(`${safeName(S.hw.name)}-grades.csv`, gradesCsv(await store.listGrades(S.hw.id), S.hw), "text/csv"); break;
+    case "dash": chrome.tabs.create({ url: chrome.runtime.getURL("dashboard.html") }); break;
   }
 });
 
-function flash(el, text) { const o = el.textContent; el.textContent = text; setTimeout(() => (el.textContent = o), 1200); }
+function flash(el) { const o = el.innerHTML; el.innerHTML = icon("checkmark"); el.style.color = "var(--ok)"; setTimeout(() => { el.innerHTML = o; el.style.color = ""; }, 1200); }
 
 document.addEventListener("change", async e => {
   const t = e.target, g = S.grade;
-  if (t.id === "hw") { await store.setActiveHw(t.value); await loadHw(); await loadGrade(); render(); return; }
-  if (!g) return;
-  if (t.id === "compare") { S.compare = t.checked; render(); return; }
+  if (!g || t.closest(".sheet")) return;
   if (t.id === "student") g.student = t.value.trim();
   else if (t.id === "status") g.status = t.value;
   else if (t.id === "comment") g.comment = t.value;
@@ -313,26 +348,26 @@ document.addEventListener("mouseup", e => {
   setTimeout(() => {
     const sel = getSelection();
     const pop = $("#popover");
-    if (!sel || sel.isCollapsed || !S.grade || S.view !== "transcript") { pop.hidden = true; return; }
+    if (!sel || sel.isCollapsed || !S.grade || S.view !== "transcript") return;
     const segOf = n => (n.nodeType === 1 ? n : n.parentElement)?.closest(".seg");
     const a = segOf(sel.anchorNode), b = segOf(sel.focusNode);
-    if (!a || !b) { pop.hidden = true; return; }
+    if (!a || !b) return;
     const i = Number(a.dataset.i), j = Number(b.dataset.i);
     const quote = sel.toString().replace(/\s*\n\s*\d{1,2}(:\d{2}){1,2}\s*\n?/g, " ").replace(/\s+/g, " ").trim();
     if (!quote) return;
     const rect = sel.getRangeAt(0).getBoundingClientRect();
-    pop.innerHTML = `<div class="small muted">Tag “${esc(quote.slice(0, 60))}${quote.length > 60 ? "…" : ""}” to:</div>
+    pop.innerHTML = `<div class="small muted" style="padding:2px 4px 4px">“${esc(quote.slice(0, 60))}${quote.length > 60 ? "…" : ""}”</div>
       ${S.hw.rubric.items.map((it, k) => `<label><input type="checkbox" value="${it.id}"><span class="sw" style="--c:${itemColor(k)}"></span>${esc(it.title)}</label>`).join("")}
-      <div class="row" style="margin-top:6px"><button class="primary" id="tag-ok">Tag</button><button id="tag-cancel">Cancel</button></div>`;
+      <div class="row" style="margin-top:6px;padding:0 4px"><button class="primary" id="tag-ok">${icon("tag")} Tag</button><button class="ghost" id="tag-cancel">Cancel</button></div>`;
     pop.hidden = false;
     pop.style.top = Math.min(rect.bottom + 6, innerHeight - pop.offsetHeight - 8) + "px";
-    pop.style.left = Math.max(8, Math.min(rect.left, innerWidth - 270)) + "px";
+    pop.style.left = Math.max(8, Math.min(rect.left, innerWidth - pop.offsetWidth - 8)) + "px";
     $("#tag-cancel").onclick = () => { pop.hidden = true; sel.removeAllRanges(); };
     $("#tag-ok").onclick = async () => {
       const ids = [...pop.querySelectorAll("input:checked")].map(c => c.value);
       if (!ids.length) return;
       const g = S.grade;
-      for (const id of ids) (g.manualSnippets[id] ||= []).push(manualSnippet(g.transcript, i, j, quote));
+      for (const id of ids) (g.manualSnippets[id] ||= []).push(manualSnippet(g.transcript, Math.min(i, j), Math.max(i, j), quote));
       if (g.status === "pending") g.status = "reviewed";
       pop.hidden = true; sel.removeAllRanges();
       await save();
@@ -340,20 +375,18 @@ document.addEventListener("mouseup", e => {
   }, 10);
 });
 
-$("#grade").onclick = runGrade;
-$("#open-settings").onclick = () => chrome.runtime.openOptionsPage();
-$("#open-dash").onclick = () => chrome.tabs.create({ url: chrome.runtime.getURL("dashboard.html") });
+$("#menu").onclick = openSettings;
 
 // ---- keep in sync with tabs/storage ----
-async function refreshForTab() {
-  await detectTab(); await loadGrade(); S.error = null; render();
-}
+async function refreshForTab() { await detectTab(); await loadGrade(); S.error = null; render(); }
 chrome.tabs.onActivated.addListener(refreshForTab);
 chrome.tabs.onUpdated.addListener((id, ch) => { if (id === S.tabId && ch.url) refreshForTab(); });
 chrome.storage.onChanged.addListener(async (changes, area) => {
   if (area === "session" && changes.pendingGrade?.newValue) return handlePending();
   if (area !== "local") return;
-  if (changes.homeworks || changes.activeHw) { await loadHw(); await loadGrade(); render(); return; }
+  if (changes.settings) S.settings = await store.getSettings();
+  if (changes.homeworks || changes.activeHw) { if (!sheet.el.classList.contains("open")) await reload(); return; }
+  if (changes.settings && !sheet.el.classList.contains("open")) render();
   if (S.hw && S.grade) {
     const k = store.gradeKey(S.hw.id, S.grade.videoId);
     const nv = changes[k]?.newValue;
@@ -363,7 +396,6 @@ chrome.storage.onChanged.addListener(async (changes, area) => {
 
 // ---- init ----
 (async () => {
-  picker = await mountPicker($("#picker"), { onChange: () => render() });
   await loadHw();
   await detectTab();
   await loadGrade();

@@ -2,80 +2,74 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Homework Dashboard</title>
+  <title>Dashboard</title>
   <link rel="stylesheet" href="ui.css">
   <style>
-    body { padding: 16px 20px 64px; }
-    header { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
-    h1 { font-size: 18px; margin: 0; }
-    .grid { display: grid; grid-template-columns: minmax(280px, 1fr) minmax(320px, 1.4fr); gap: 12px; margin-bottom: 12px; }
-    @media (max-width: 800px) { .grid { grid-template-columns: 1fr; } }
-    #urls { min-height: 92px; font-family: ui-monospace, Menlo, monospace; font-size: 12px; }
-    progress { width: 100%; height: 8px; }
-    .table-wrap { overflow: auto; max-height: 70vh; border: 1px solid var(--line); border-radius: 8px; }
+    body { padding: 0; position: relative; min-height: 100vh; }
+    header.top { display: flex; gap: 6px; align-items: center; padding: 10px 20px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--bg); z-index: 5; }
+    header.top select.hw { background-color: transparent; font-weight: 600; font-size: 15px; }
+    header.top select.hw:hover { background-color: var(--bg2); }
+    main { padding: 14px 20px 64px; display: flex; flex-direction: column; gap: 12px; }
+    .bar { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+    #urls { min-height: 60px; font-family: ui-monospace, Menlo, monospace; font-size: 12px; }
+    .add { display: flex; gap: 8px; align-items: flex-start; }
+    .add textarea { flex: 1; }
+    .model-btn { gap: 4px; }
+    .model-btn .sf.xs { color: var(--fg2); }
+    progress { width: 100%; height: 6px; accent-color: var(--accent); }
+    .table-wrap { overflow: auto; max-height: 72vh; border: 1px solid var(--line); border-radius: var(--radius); }
     td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
     td .ovr { color: var(--override); font-weight: 700; }
-    td input.student { width: 140px; border-color: transparent; background: transparent; }
-    td input.student:hover, td input.student:focus { border-color: var(--line); }
-    td.title { max-width: 280px; }
+    td input.student { width: 140px; background: transparent; }
+    td input.student:hover, td input.student:focus { background: var(--bg2); }
+    td.title { max-width: 300px; }
+    td.acts { white-space: nowrap; }
+    td.acts button { visibility: hidden; }
+    tr:hover td.acts button { visibility: visible; }
     tr.busy td { background: color-mix(in srgb, var(--accent) 6%, transparent); }
-    .filters .chip { cursor: pointer; }
     #log { max-height: 120px; overflow: auto; font-size: 12px; }
     details.tr { border-bottom: 1px solid var(--line); padding: 6px 0; }
     details.tr summary { cursor: pointer; font-weight: 600; }
     .line { display: flex; gap: 8px; font-size: 12px; padding: 1px 6px; border-left: 3px solid transparent; }
     .line.tagged { border-left-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); }
     .line .ts { width: 50px; text-align: right; flex: none; }
+    .sheet { left: auto; width: min(440px, 100vw); box-shadow: -8px 0 32px rgba(0,0,0,.15); }
+    .setup { max-width: 560px; }
   </style>
 </head>
 <body>
-  <header>
-    <h1>Homework</h1>
-    <select id="hw"></select>
-    <span id="rubricinfo" class="muted"></span>
+  <header class="top">
+    <select id="hw" class="hw" title="Homework"></select>
+    <span id="rubricinfo" class="muted small"></span>
     <span class="grow"></span>
-    <button id="settings">⚙ Settings</button>
+    <button id="menu" class="icon" title="Settings"></button>
   </header>
-
-  <div class="grid">
-    <section class="card">
-      <b>Add videos</b>
-      <div class="small muted">One per line: <code>url</code> or <code>student, url</code>. A CSV with a header row works too.</div>
-      <textarea id="urls" placeholder="Jane Doe, https://youtu.be/abc123&#10;https://www.youtube.com/watch?v=xyz789"></textarea>
-      <div class="row"><button id="add" class="primary">Add to homework</button><span id="addmsg" class="small muted"></span></div>
-    </section>
-    <section class="card">
-      <b>Batch</b>
-      <div id="picker" style="margin:6px 0"></div>
-      <div class="row">
-        <button id="b-ungraded" class="primary">Grade ungraded</button>
-        <button id="b-all">Re-grade all</button>
-        <button id="b-fetch">Fetch transcripts only</button>
-        <button id="b-failed">Retry failed</button>
-        <button id="b-stop" class="danger" hidden>Stop</button>
+  <main>
+    <div id="setup" class="setup" hidden></div>
+    <div id="work" hidden>
+      <div class="add">
+        <textarea id="urls" placeholder="One video per line:  Jane Doe, https://youtu.be/abc123   (CSV with header also works)"></textarea>
+        <button id="add" class="primary"></button>
       </div>
-      <div class="row small" style="margin-top:6px">
-        <label>Parallel <select id="conc"><option>1</option><option>2</option><option>3</option><option>4</option></select></label>
-        <label title="Background tabs can be throttled by Chrome. Foreground is slower to watch but more reliable."><input type="checkbox" id="fg"> foreground tabs</label>
-        <span class="muted">Keep this tab open while a batch runs.</span>
+      <div class="bar" style="margin-top:10px">
+        <button id="b-ungraded" class="primary"></button>
+        <button id="b-model" class="model-btn" title="Model for batch"></button>
+        <button id="b-all" title="Re-grade all (adds a run; overrides kept)"></button>
+        <button id="b-fetch" title="Fetch transcripts only"></button>
+        <button id="b-failed" title="Retry failed"></button>
+        <button id="b-stop" class="danger" hidden></button>
+        <span id="progtext" class="small muted"></span>
+        <span class="grow"></span>
+        <div class="seg-ctl" id="filters"></div>
+        <button id="x-menu" title="Export"></button>
       </div>
-      <div id="prog" hidden style="margin-top:8px"><progress id="bar" value="0" max="1"></progress><div id="progtext" class="small muted"></div></div>
+      <div id="prog" hidden><progress id="bar" value="0" max="1"></progress></div>
       <div id="log" class="err" hidden></div>
-    </section>
-  </div>
-
-  <div class="row" style="margin-bottom:8px">
-    <div class="filters row" id="filters"></div>
-    <span class="grow"></span>
-    <button id="x-csv">Export CSV</button>
-    <button id="x-md">Export report (.md)</button>
-    <button id="x-json">Export JSON</button>
-    <button id="x-zip">Transcripts (.zip)</button>
-    <button id="x-view">View all transcripts</button>
-  </div>
-  <div class="table-wrap"><table id="tbl"></table></div>
-  <section id="alltr" hidden style="margin-top:16px"></section>
-
+      <div class="table-wrap" style="margin-top:10px"><table id="tbl"></table></div>
+      <section id="alltr" hidden style="margin-top:16px"></section>
+    </div>
+  </main>
+  <div id="popover" class="pop" hidden></div>
   <script type="module" src="dashboard.js"></script>
 </body>
 </html>
