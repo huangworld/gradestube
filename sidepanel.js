@@ -165,7 +165,7 @@ function render() {
 
   const score = `<div class="score-row">
     <span class="big ${ov.overridden ? "overridden" : ""}" style="${ov.overridden ? "color:var(--override)" : ""}">${ov.graded ? ov.overall : "–"}</span><span class="max">/ ${max}</span>
-    <input type="number" step="0.5" id="overall" class="${ov.overridden ? "overridden" : ""}" value="${ov.overridden ? ov.overall : ""}" placeholder="edit" title="Override total (sum: ${ov.sum}${run ? `, AI: ${ov.aiSum}` : ""})">
+    <input type="number" step="any" id="overall" class="${ov.overridden ? "overridden" : ""}" value="${ov.overridden ? ov.overall : ""}" placeholder="edit" title="Override total (sum: ${ov.sum}${run ? `, AI: ${ov.aiSum}` : ""})">
     ${ov.overridden ? `<button class="icon sm" data-a="resetoverall" title="Reset to sum (${ov.sum})">${icon("arrow.counterclockwise")}</button>` : ""}
     <span class="grow"></span>${gradeButton(g)}</div>`;
 
@@ -213,7 +213,7 @@ function renderRubric(g, eff, run) {
       <div class="item-head">
         <div class="title">${esc(it.title)}${it.description ? `<div class="desc">${esc(it.description)}</div>` : ""}</div>
         <div class="score-box">
-          <input type="number" step="0.5" min="0" ${it.maxPoints != null ? `max="${it.maxPoints}"` : ""} data-score="${it.id}" class="${e.overridden ? "overridden" : ""}" value="${e.score ?? ""}" placeholder="–" title="${e.overridden ? `AI: ${e.aiScore ?? "–"}` : "Score"}">
+          <input type="number" step="any" min="0" ${it.maxPoints != null ? `max="${it.maxPoints}"` : ""} data-score="${it.id}" class="${e.overridden ? "overridden" : ""}" value="${e.score ?? ""}" placeholder="–" title="${e.overridden ? `AI: ${e.aiScore ?? "–"}` : "Score"}">
           <span class="max">/${it.maxPoints ?? "?"}</span>
           ${e.overridden ? `<button class="icon sm" data-a="resetitem" data-id="${it.id}" title="Reset to AI score (${e.aiScore ?? "–"})">${icon("arrow.counterclockwise")}</button>` : ""}
         </div>

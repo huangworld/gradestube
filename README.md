@@ -32,14 +32,17 @@ After you update the code, click reload on `chrome://extensions`, then refresh a
 Open the side panel (click the extension icon, or **Grade** on any transcript). With no homework yet, the panel shows a **New homework** form right away:
 
 1. Type a name, for example "A3 Video Pitch".
-2. Drop in a `.txt` or `.md` rubric, or paste it, then click **Create**. See [`examples/sample-rubric.md`](examples/sample-rubric.md).
+2. Drop in a rubric (`.md`, `.txt`, `.csv`, `.tsv` or `.xlsx`), or paste anything, even loose prose, then click **Create**. See [`examples/sample-rubric.md`](examples/sample-rubric.md).
 3. Pick **Edit rubric…** from the homework menu at the top to fix titles or points. The full rubric text is also sent to the model, so details in it still count.
 
 The homework menu at the top of the side panel and dashboard switches homeworks and creates new ones. The most recently used homework is selected automatically.
 
 API keys and models live behind **☰** (top right). Paste a key for each provider you want. Skip this for manual-only grading. Star models you'll switch between: they show up in the quick model menu next to **Grade**.
 
-Supported rubric styles:
+How parsing works:
+
+- With an API key set, the selected model turns the rubric into items: one per separately scored thing, sub-parts named "Parent · Sub-part", full/partial/zero credit text kept in the description, fractional points kept as-is (0.125 works). Grading rules that apply across items go into **Grading notes** and are sent with every video.
+- Without a key, a built-in parser handles headings, bullets and markdown tables with points:
 
 ```markdown
 ## Solution demo (20 pts)            <- headings with points
@@ -125,7 +128,7 @@ background.js      toolbar copy, opens side panel
 sidepanel.*        per-video grading UI
 dashboard.*        homework table, batch, exports
 options.*          full-page settings (same panel as ☰)
-lib/               storage, rubric parser, LLM adapters, grounding, exports,
-                   settings sheet, rubric editor, SF-style SVG icons
+lib/               storage, rubric parsers (LLM + heuristic), xlsx reader, LLM adapters,
+                   grounding, exports, settings sheet, rubric editor, SF-style SVG icons
 examples/          sample rubric
 ```
