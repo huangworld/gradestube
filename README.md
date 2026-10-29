@@ -41,7 +41,8 @@ API keys and models live behind **☰** (top right). Paste a key for each provid
 
 How parsing works:
 
-- With an API key set, the selected model turns the rubric into items: one per separately scored thing, sub-parts named "Parent · Sub-part", full/partial/zero credit text kept in the description, fractional points kept as-is (0.125 works). Grading rules that apply across items go into **Grading notes** and are sent with every video.
+- Tables (`.csv`, `.tsv`, `.xlsx`) load directly, no LLM. Columns are matched by header name: item, sub-part ("What is scored"), points ("Max pts" wins over "Item pts"), full / partial / zero credit, and group. A blank item cell continues the item above, so sub-parts become "Item · Sub-part". Total rows are skipped. Rules below the table become **Grading notes**.
+- For other text, with an API key set, the selected model turns the rubric into items: one per separately scored thing, sub-parts named "Parent · Sub-part", full/partial/zero credit text kept in the description, fractional points kept as-is (0.125 works). Grading rules that apply across items go into **Grading notes** and are sent with every video.
 - Without a key, a built-in parser handles headings, bullets and markdown tables with points:
 
 ```markdown
