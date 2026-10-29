@@ -1,0 +1,18 @@
+#ytrg-toolbar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+  padding: 8px 12px; margin: 0 0 4px; border-bottom: 1px solid var(--yt-spec-10-percent-layer, #ddd);
+  font-family: Roboto, Arial, sans-serif; font-size: 13px;
+}
+#ytrg-toolbar button {
+  border: 1px solid var(--yt-spec-10-percent-layer, #ccc); background: var(--yt-spec-badge-chip-background, #f2f2f2);
+  color: var(--yt-spec-text-primary, #0f0f0f); border-radius: 16px; padding: 6px 10px; cursor: pointer; font-size: 13px;
+}
+#ytrg-toolbar button:hover { filter: brightness(0.95); }
+#ytrg-toolbar .ytrg-primary { background: #2563eb; color: #fff; border-color: #2563eb; font-weight: 500; }
+#ytrg-toolbar .ytrg-label { flex-basis: 100%; color: var(--yt-spec-text-secondary, #606060); font-size: 12px; }
+#ytrg-toast {
+  position: fixed; left: 50%; bottom: 32px; transform: translateX(-50%) translateY(20px); opacity: 0;
+  background: #111; color: #fff; padding: 10px 16px; border-radius: 8px; z-index: 99999;
+  font: 14px Roboto, Arial, sans-serif; transition: all .2s; pointer-events: none; max-width: 80vw;
+}
+#ytrg-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }

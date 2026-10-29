@@ -1,0 +1,20 @@
+{
+  "manifest_version": 3,
+  "name": "YT Rubric Grader",
+  "version": "2.0",
+  "description": "Grade YouTube video transcripts against a rubric, with timestamped evidence. Also copies transcripts.",
+  "permissions": ["activeTab", "storage", "unlimitedStorage", "sidePanel", "tabs"],
+  "host_permissions": [
+    "*://www.youtube.com/*",
+    "https://api.anthropic.com/*",
+    "https://api.openai.com/*",
+    "https://generativelanguage.googleapis.com/*"
+  ],
+  "action": { "default_title": "Copy YT Transcript" },
+  "side_panel": { "default_path": "sidepanel.html" },
+  "options_page": "options.html",
+  "content_scripts": [
+    { "matches": ["*://www.youtube.com/*"], "js": ["content.js"], "css": ["content.css"] }
+  ],
+  "background": { "service_worker": "background.js", "type": "module" }
+}

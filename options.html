@@ -1,0 +1,49 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Rubric Grader Settings</title>
+  <link rel="stylesheet" href="ui.css">
+  <style>
+    body { max-width: 920px; margin: 0 auto; padding: 24px 16px 64px; }
+    h1 { font-size: 20px; } h2 { font-size: 16px; margin: 28px 0 10px; }
+    section.card { margin-bottom: 12px; }
+    .keys label { display: grid; grid-template-columns: 90px 1fr; gap: 8px; align-items: center; margin: 6px 0; }
+    .keys input { width: 100%; }
+    .hw-list { display: flex; gap: 6px; flex-wrap: wrap; }
+    .hw-list .chip { cursor: pointer; padding: 4px 12px; font-size: 13px; }
+    #items input[type=text] { width: 100%; }
+    #items textarea { min-height: 32px; font-size: 12px; }
+    #items td:nth-child(3) { width: 80px; }
+    #items td:last-child { width: 32px; }
+    .drop { border: 2px dashed var(--line); border-radius: 8px; padding: 12px; text-align: center; }
+    .drop.over { border-color: var(--accent); }
+    #raw { min-height: 140px; font-family: ui-monospace, Menlo, monospace; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <h1>YT Rubric Grader settings</h1>
+
+  <h2>API keys</h2>
+  <section class="card keys">
+    <label>Anthropic <input type="password" data-key="anthropic" placeholder="sk-ant-…" autocomplete="off"></label>
+    <label>OpenAI <input type="password" data-key="openai" placeholder="sk-…" autocomplete="off"></label>
+    <label>Gemini <input type="password" data-key="gemini" placeholder="AIza…" autocomplete="off"></label>
+    <div class="small muted">Keys stay in this browser's extension storage. They're sent only to their own provider.</div>
+  </section>
+
+  <h2>Default model</h2>
+  <section class="card">
+    <div id="picker"></div>
+    <div class="small muted" style="margin-top:6px">Star models to switch between them quickly from the side panel and dashboard.</div>
+  </section>
+
+  <h2>Homeworks</h2>
+  <section class="card">
+    <div class="row"><div class="hw-list grow" id="hwlist"></div><button id="newhw">+ New homework</button></div>
+  </section>
+
+  <div id="hwedit"></div>
+  <script type="module" src="options.js"></script>
+</body>
+</html>

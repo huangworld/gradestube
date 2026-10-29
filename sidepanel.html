@@ -1,0 +1,25 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Rubric Grader</title>
+  <link rel="stylesheet" href="ui.css">
+  <link rel="stylesheet" href="sidepanel.css">
+</head>
+<body>
+  <header id="top">
+    <div class="row">
+      <select id="hw" class="grow" title="Active homework"></select>
+      <button id="open-dash" class="icon" title="Homework dashboard">▦</button>
+      <button id="open-settings" class="icon" title="Settings">⚙</button>
+    </div>
+    <div class="row" style="margin-top:6px">
+      <div id="picker" class="grow"></div>
+      <button id="grade" class="primary">Grade</button>
+    </div>
+  </header>
+  <main id="app"></main>
+  <div id="popover" hidden></div>
+  <script type="module" src="sidepanel.js"></script>
+</body>
+</html>
